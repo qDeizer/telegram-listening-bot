@@ -1,47 +1,85 @@
 from telethon.sync import TelegramClient, events
 import re
 from datetime import datetime
+import requests
+import os
 
-# === AYARLAR ===
-api_id = 29120660  # Buraya kendi API ID'ni yaz
-api_hash = 'a22e6c2850bc998882238f58bcfae60d'  # Buraya kendi API Hash'ini yaz
-session_name = 'promo_session'  # .session dosyanın adı (uzantısı .session olacak)
+# === TELEGRAM API BİLGİLERİ ===
+api_id = int(os.environ['API_ID'])  # Railway'de ortam değişkeninden okunacak
+api_hash = os.environ['API_HASH']
+session_name = 'promo_session'
+
+# === TELEGRAM BOT BİLGİLERİ ===
+bot_token = os.environ['BOT_TOKEN']
+chat_id = int(os.environ['CHAT_ID'])
 
 # === ANAHTAR KELİMELER ===
-KEYWORDS = ["KOD", "PROMO"]  # Büyük/küçük harfe duyarsız şekilde kontrol edilecek
+KEYWORDS = ["KOD", "PROMO"]
 
 # === TAKİP EDİLECEK KANALLAR ===
 ALLOWED_CHANNELS = [
-    "@kanal1",
-    "@kanal2"
-    # Buraya sadece takip edeceğin kanalları yaz
+    "@zbahis_com",
+    "@zbahiscom",
+    "@otobetcom",
+    "@betkomtelegram",
+    "@resmibetine",
+    "@grandpashagir",
+    "@TarafbetDuyuru",
+    "@casinoroyalcom",
+    "@asyaresmi",
+    "@maltresmi",
+    "@bahiscomtg",
+    "@dumanresmi",
+    "@fixofficial",
+    "@matadorbetresmi",
+    "@betpublicofficial",
+    "@supertotobet_official",
+    "@padisah_sosyal",
 ]
 
-# === BOT BAŞLIYOR ===
+# === TELETHON CLIENT ===
 client = TelegramClient(session_name, api_id, api_hash)
 
 @client.on(events.NewMessage)
 async def handler(event):
-    sender = await event.get_sender()
     chat = await event.get_chat()
-
     try:
         chat_username = f"@{chat.username}" if chat.username else None
         if chat_username not in ALLOWED_CHANNELS:
-            return  # Bu kanal listede yoksa mesajı dikkate alma
+            return
 
         text = event.raw_text
         for keyword in KEYWORDS:
-            if re.search(rf"\\b{keyword}\\b", text, re.IGNORECASE):
-                msg = f"\ud83d\udce3 [ANAHTAR KELİME BULUNDU]\n\n" \
-                      f"\ud83d\udccc Kanal: {chat_username}\n" \
-                      f"\ud83d\udd50 Tarih: {datetime.now().strftime('%d.%m.%Y - %H:%M')}\n" \
-                      f"\ud83d\udce8 Mesaj:\n{text}"
-                await client.send_message("me", msg)  # "me" kendine mesaj gönderir
+            if re.search(rf"\b{keyword}\b", text, re.IGNORECASE):
+                msg = f"📣 [ANAHTAR KELİME BULUNDU]\n\n" \
+                      f"📌 Kanal: {chat_username}\n" \
+                      f"🕐 Tarih: {datetime.now().strftime('%d.%m.%Y - %H:%M')}\n" \
+                      f"📨 Mesaj:\n{text}"
+                requests.post(
+                    f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                    data={"chat_id": chat_id, "text": msg}
+                )
                 break
     except Exception as e:
         print(f"Hata: {e}")
 
-print("\u2728 Bot başlatılıyor...")
-client.start()
-client.run_until_disconnected()
+async def on_start():
+    requests.post(
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        data={"chat_id": chat_id, "text": "🚀 Bot Railway'de başlatıldı. Kanal dinlemesi aktif."}
+    )
+
+async def on_stop():
+    requests.post(
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        data={"chat_id": chat_id, "text": "⛔️ Bot durduruluyor. Kanal dinlemesi sona erdi."}
+    )
+
+print("✨ Bot başlatılıyor...")
+
+with client:
+    client.loop.run_until_complete(on_start())
+    try:
+        client.run_until_disconnected()
+    finally:
+        client.loop.run_until_complete(on_stop())
